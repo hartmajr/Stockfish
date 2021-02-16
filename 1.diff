@@ -1,0 +1,54 @@
+diff --git a/src/FatFritz2_v1.bin b/src/FatFritz2_v1.bin
+new file mode 100644
+index 0000000000..1a63a31497
+Binary files /dev/null and b/src/FatFritz2_v1.bin differ
+diff --git a/src/compile.sh b/src/compile.sh
+index ee69a447fc..3e54fab6d1 100644
+--- a/src/compile.sh
++++ b/src/compile.sh
+@@ -1,4 +1,4 @@
+-for ARCH in x86-64-avx2 x86-64-bmi2 x86-64-modern
++for ARCH in x86-64-avx2 x86-64-bmi2 x86-64-modern x86-64-ssse3
+ do
+     make clean
+     make -j profile-build ARCH=$ARCH COMP=mingw
+diff --git a/src/evaluate.cpp b/src/evaluate.cpp
+index 2918527f52..5abe00af32 100644
+--- a/src/evaluate.cpp
++++ b/src/evaluate.cpp
+@@ -43,6 +43,7 @@
+ //     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
+ //     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
+ // Note that this does not work in Microsof Visual Studio.
++#define NNUE_EMBEDDING_OFF
+ #if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
+   INCBIN(EmbeddedNNUE, EvalFileDefaultName);
+ #else
+diff --git a/src/nnue/architectures/halfkp_256x2-32-32.h b/src/nnue/architectures/halfkp_256x2-32-32.h
+index 9f142a0466..4104651393 100644
+--- a/src/nnue/architectures/halfkp_256x2-32-32.h
++++ b/src/nnue/architectures/halfkp_256x2-32-32.h
+@@ -41,8 +41,8 @@ namespace Layers {
+ 
+ // Define network structure
+ using InputLayer = InputSlice<kTransformedFeatureDimensions * 2>;
+-using HiddenLayer1 = ClippedReLU<AffineTransform<InputLayer, 32>>;
+-using HiddenLayer2 = ClippedReLU<AffineTransform<HiddenLayer1, 32>>;
++using HiddenLayer1 = ClippedReLU<AffineTransform<InputLayer, 16>>;
++using HiddenLayer2 = ClippedReLU<AffineTransform<HiddenLayer1, 16>>;
+ using OutputLayer = AffineTransform<HiddenLayer2, 1>;
+ 
+ }  // namespace Layers
+diff --git a/src/ucioption.cpp b/src/ucioption.cpp
+index fd0c65d345..03f377b399 100644
+--- a/src/ucioption.cpp
++++ b/src/ucioption.cpp
+@@ -59,7 +59,7 @@ void init(OptionsMap& o) {
+   constexpr int MaxHashMB = Is64Bit ? 33554432 : 2048;
+ 
+   o["Debug Log File"]        << Option("", on_logger);
+-  o["Contempt"]              << Option(0, -100, 100);
++  o["Contempt"]              << Option(24, -100, 100);
+   o["Analysis Contempt"]     << Option("Both var Off var White var Black var Both", "Both");
+   o["Threads"]               << Option(1, 1, 512, on_threads);
+   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);

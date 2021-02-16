@@ -1,0 +1,121 @@
+diff --git a/src/Makefile b/src/Makefile
+index 87203547f2..65f89cfcd7 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -743,7 +743,7 @@ clean: objclean profileclean
+ 
+ # evaluation network (nnue)
+ net:
+-	$(eval nnuenet := $(shell grep EvalFileDefaultName evaluate.h | grep define | sed 's/.*\(nn-[a-z0-9]\{12\}.nnue\).*/\1/'))
++	$(eval nnuenet := $(shell grep EvalFileDefaultName evaluate.h | grep define | sed 's/.*\(FatFritz2_v1.bin\).*/\1/'))
+ 	@echo "Default net: $(nnuenet)"
+ 	$(eval nnuedownloadurl := https://tests.stockfishchess.org/api/nn/$(nnuenet))
+ 	$(eval curl_or_wget := $(shell if hash curl 2>/dev/null; then echo "curl -skL"; elif hash wget 2>/dev/null; then echo "wget -qO-"; fi))
+@@ -756,14 +756,6 @@ net:
+                echo "Downloading $(nnuedownloadurl)"; $(curl_or_wget) $(nnuedownloadurl) > $(nnuenet);\
+             fi; \
+         fi;
+-	$(eval shasum_command := $(shell if hash shasum 2>/dev/null; then echo "shasum -a 256 "; elif hash sha256sum 2>/dev/null; then echo "sha256sum "; fi))
+-	@if [ "x$(shasum_command)" != "x" ]; then \
+-	    if [ "$(nnuenet)" != "nn-"`$(shasum_command) $(nnuenet) | cut -c1-12`".nnue" ]; then \
+-                echo "Failed download or $(nnuenet) corrupted, please delete!"; exit 1; \
+-            fi \
+-         else \
+-            echo "shasum / sha256sum not found, skipping net validation"; \
+-        fi
+ 
+ # clean binaries and objects
+ objclean:
+diff --git a/src/compile.sh b/src/compile.sh
+new file mode 100644
+index 0000000000..ee69a447fc
+--- /dev/null
++++ b/src/compile.sh
+@@ -0,0 +1,6 @@
++for ARCH in x86-64-avx2 x86-64-bmi2 x86-64-modern
++do
++    make clean
++    make -j profile-build ARCH=$ARCH COMP=mingw
++    mv ./stockfish.exe ./fat-fritz2-$ARCH.exe
++done
+\ No newline at end of file
+diff --git a/src/evaluate.cpp b/src/evaluate.cpp
+index c137fab5ad..2918527f52 100644
+--- a/src/evaluate.cpp
++++ b/src/evaluate.cpp
+@@ -1053,7 +1053,7 @@ Value Eval::evaluate(const Position& pos) {
+       // Scale and shift NNUE for compatibility with search and classical evaluation
+       auto  adjusted_NNUE = [&](){
+          int mat = pos.non_pawn_material() + PawnValueMg * pos.count<PAWN>();
+-         return NNUE::evaluate(pos) * (679 + mat / 32) / 1024 + Tempo;
++         return NNUE::evaluate(pos) * (1210 + mat / 32) / 1024 + Tempo;
+       };
+ 
+       // If there is PSQ imbalance use classical eval, with small probability if it is small
+diff --git a/src/evaluate.h b/src/evaluate.h
+index 8beca2d0a2..caa7d3bc7a 100644
+--- a/src/evaluate.h
++++ b/src/evaluate.h
+@@ -36,7 +36,7 @@ namespace Eval {
+   // The default net name MUST follow the format nn-[SHA256 first 12 digits].nnue
+   // for the build process (profile-build and fishtest) to work. Do not change the
+   // name of the macro, as it is used in the Makefile.
+-  #define EvalFileDefaultName   "nn-62ef826d1a6d.nnue"
++  #define EvalFileDefaultName   "FatFritz2_v1.bin"
+ 
+   namespace NNUE {
+ 
+diff --git a/src/misc.cpp b/src/misc.cpp
+index 48e20a396c..0dd05bc10d 100644
+--- a/src/misc.cpp
++++ b/src/misc.cpp
+@@ -140,20 +140,11 @@ class Logger {
+ 
+ const string engine_info(bool to_uci) {
+ 
+-  const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
+-  string month, day, year;
+-  stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
+-
+-  ss << "Stockfish " << Version << setfill('0');
+-
+-  if (Version.empty())
+-  {
+-      date >> month >> day >> year;
+-      ss << setw(2) << day << setw(2) << (1 + months.find(month) / 4) << year.substr(2);
+-  }
++  stringstream ss;
++  ss << "Fat Fritz 2";
+ 
+   ss << (to_uci  ? "\nid author ": " by ")
+-     << "the Stockfish developers (see AUTHORS file)";
++     << "Stockfish Devs and Albert Silver (neural network)";
+ 
+   return ss.str();
+ }
+diff --git a/src/nnue/architectures/halfkp_256x2-32-32.h b/src/nnue/architectures/halfkp_256x2-32-32.h
+index a0fe2e0ad8..9f142a0466 100644
+--- a/src/nnue/architectures/halfkp_256x2-32-32.h
++++ b/src/nnue/architectures/halfkp_256x2-32-32.h
+@@ -35,7 +35,7 @@ using RawFeatures = Features::FeatureSet<
+     Features::HalfKP<Features::Side::kFriend>>;
+ 
+ // Number of input feature dimensions after conversion
+-constexpr IndexType kTransformedFeatureDimensions = 256;
++constexpr IndexType kTransformedFeatureDimensions = 512;
+ 
+ namespace Layers {
+ 
+diff --git a/src/ucioption.cpp b/src/ucioption.cpp
+index 03f377b399..fd0c65d345 100644
+--- a/src/ucioption.cpp
++++ b/src/ucioption.cpp
+@@ -59,7 +59,7 @@ void init(OptionsMap& o) {
+   constexpr int MaxHashMB = Is64Bit ? 33554432 : 2048;
+ 
+   o["Debug Log File"]        << Option("", on_logger);
+-  o["Contempt"]              << Option(24, -100, 100);
++  o["Contempt"]              << Option(0, -100, 100);
+   o["Analysis Contempt"]     << Option("Both var Off var White var Black var Both", "Both");
+   o["Threads"]               << Option(1, 1, 512, on_threads);
+   o["Hash"]                  << Option(16, 1, MaxHashMB, on_hash_size);
